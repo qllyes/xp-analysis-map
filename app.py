@@ -297,13 +297,13 @@ class NewProductAnalysisApp:
     def render_header(self):
         st.set_page_config(page_title="新品过会分析表生成工具", layout="wide")
         st.title("新品过会分析表生成工具")
-        st.markdown(
-            """
-            <div class="main-description">
-            <p>一个高效、智能的工具。</p>
-            </div>
-            """, unsafe_allow_html=True
-        )
+        # st.markdown(
+        #     """
+        #     <div class="main-description">
+        #     <p>一个高效工具</p>
+        #     </div>
+        #     """, unsafe_allow_html=True
+        # )
         st.divider()
 
     def render_input_section(self):
