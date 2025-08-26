@@ -53,10 +53,10 @@ class NewProductAnalysisApp:
                 sql_query = self.sql_processor.read_sql_file(NATIONAL_DIR_SQL_FILE)
                 national_dir_df, _ = self.sql_processor.execute_simple_query(sql_query)
                 
-                if not national_dir_df.empty and '国家药品编码' in current_df.columns and '国家药品编码' in current_df.columns:
+                if not national_dir_df.empty and '国家药品编码' in current_df.columns and '国家药品编码' in national_dir_df.columns:
                     current_df['国家药品编码'] = current_df['国家药品编码'].astype(str)
                     national_dir_df['国家药品编码'] = national_dir_df['国家药品编码'].astype(str)
-                    
+                    #先删除可能存在的列
                     cols_to_replace = ['国家医保目录', '省医保目录', '省医保支付价']
                     df_cleaned = current_df.drop(columns=[col for col in cols_to_replace if col in current_df.columns])
                     
@@ -68,32 +68,33 @@ class NewProductAnalysisApp:
         except Exception as e:
             st.error(f"❌ 关联国家医保目录时出错: {e}")
 
-        # --- 第二步：关联采购公司与战区映射表 ---
-        try:
-            if PURCHASE_CO_MAPPING_FILE.exists():
-                mapping_df = pd.read_excel(PURCHASE_CO_MAPPING_FILE)
-                
-                join_key = '采购公司'
-                target_col = 'lev3_org_name'
-                if join_key in current_df.columns and join_key in mapping_df.columns and target_col in mapping_df.columns:
-                    current_df[join_key] = current_df[join_key].astype(str)
-                    mapping_df[join_key] = mapping_df[join_key].astype(str)
-
-                    if target_col in current_df.columns:
-                        current_df = current_df.drop(columns=[target_col])
+        # --- 第二步：当为地采时，则关联采购公司与战区映射表 ---
+        if scm_df['采购模式'].dropna().iloc[0] !='统采':
+            try:
+                if PURCHASE_CO_MAPPING_FILE.exists():
+                    mapping_df = pd.read_excel(PURCHASE_CO_MAPPING_FILE)
                     
-                    current_df = pd.merge(
-                        current_df,
-                        mapping_df[[join_key, target_col]],
-                        on=join_key,
-                        how='left'
-                    )
+                    join_key = '采购公司'
+                    target_col = '提报战区'
+                    if join_key in current_df.columns and join_key in mapping_df.columns and target_col in mapping_df.columns:
+                        current_df[join_key] = current_df[join_key].astype(str)
+                        mapping_df[join_key] = mapping_df[join_key].astype(str)
+
+                        if target_col in current_df.columns:
+                            current_df = current_df.drop(columns=[target_col])
+                        
+                        current_df = pd.merge(
+                            current_df,
+                            mapping_df[[join_key, target_col]],
+                            on=join_key,
+                            how='left'
+                        )
+                    else:
+                        st.warning("⚠️ 无法关联战区信息（缺少关联键或目标列）。")
                 else:
-                    st.warning("⚠️ 无法关联战区信息（缺少关联键或目标列）。")
-            else:
-                st.warning(f"⚠️ 未找到 '{PURCHASE_CO_MAPPING_FILE}' 文件，战区信息将不会关联。")
-        except Exception as e:
-            st.error(f"❌ 关联战区信息时出错: {e}")
+                    st.warning(f"⚠️ 未找到 '{PURCHASE_CO_MAPPING_FILE}' 文件，战区信息将不会关联。")
+            except Exception as e:
+                st.error(f"❌ 关联战区信息时出错: {e}")
 
         return current_df
 
@@ -418,8 +419,11 @@ class NewProductAnalysisApp:
             status.update(label="提取筛选条件...", state="running")
             scm_common_names = scm_df['通用名'].dropna().unique().tolist()
             scm_strategy_categories = scm_df['策略分类'].dropna().unique().tolist()
-            scm_lev3_org_name =scm_df['lev3_org_name'].dropna().unique().tolist()
             scm_cgms = scm_df['采购模式'].dropna().iloc[0]
+            if scm_cgms !='统采':
+                scm_lev3_org_name =scm_df['提报战区'].dropna().unique().tolist()
+            else:
+                scm_lev3_org_name=None
             if not st.session_state.is_running: return # <-- 检查点
 
             status.update(label="🔎 正在从数据库按条件查询对标品数据…", state="running")
@@ -427,7 +431,7 @@ class NewProductAnalysisApp:
             if not sql_path.exists():
                 status.update(label="❌ 后台SQL文件缺失。", state="error"); return
             
-            sql_query = self.sql_processor.read_sql_file(sql_path)
+            sql_query = self.sql_processor.read_sql_file(sql_path) 
             benchmark_df, executed_sql = self.sql_processor.execute_sql_query(
                 sql_query, cgms=scm_cgms,common_names=scm_common_names, strategy_categories=scm_strategy_categories
                 ,lev3_org_name=scm_lev3_org_name
@@ -456,7 +460,8 @@ class NewProductAnalysisApp:
 
             status.update(label="📦 正在生成高级格式的Excel文件…", state="running")
             output, filename = self.result_exporter.export_to_excel(formatted_df, sep_indices, scm_indices)
-
+            # --- 新增这一行新品数 ---
+            st.session_state["new_product_count"] = len(scm_indices) 
             st.session_state["result_df"] = formatted_df 
             st.session_state["result_output"] = output
             st.session_state["result_filename"] = filename
@@ -478,13 +483,7 @@ class NewProductAnalysisApp:
         result_df = st.session_state["result_df"]
         
         # 计算新品数
-        new_product_count = 0
-        if '过会编码' in result_df.columns:
-            # 将“过会编码”列安全地转换为字符串
-            codes_as_str = result_df['过会编码'].astype(str)
-            # 应用两个筛选条件：长度大于5 且 不等于占位符
-            is_new_product = (codes_as_str.str.len() > 5) & (codes_as_str != '_SEPARATOR_')
-            new_product_count = result_df[is_new_product].shape[0]
+        new_product_count = st.session_state.get("new_product_count", 0)
 
         st.markdown('<div class="card">', unsafe_allow_html=True)
         st.markdown('<div class="card-title">③ 生成结果</div>', unsafe_allow_html=True)
