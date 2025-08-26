@@ -457,15 +457,9 @@ class NewProductAnalysisApp:
             status.update(label="🎨 正在清理与格式化数据...", state="running")
             formatted_df = self.data_formatter.format_data(processed_df.copy())
             if not st.session_state.is_running: return # <-- 检查点
-
+            
             status.update(label="📦 正在生成高级格式的Excel文件…", state="running")
-            # --- 核心改动：将采购模式传递给导出器 ---
-            output, filename = self.result_exporter.export_to_excel(
-                formatted_df, 
-                sep_indices, 
-                scm_indices, 
-                purchase_mode=scm_cgms
-            )
+            output, filename = self.result_exporter.export_to_excel(formatted_df, sep_indices, scm_indices,scm_cgms)
             # --- 新增这一行新品数 ---
             st.session_state["new_product_count"] = len(scm_indices) 
             st.session_state["result_df"] = formatted_df 

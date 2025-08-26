@@ -58,11 +58,11 @@ class DataMerger:
             # 4. 对筛选后的benchmark组进行排序
             if not final_benchmark_group.empty:
                 # 确保排序键存在
-                sort_keys = ['取数维度（战区/集团）', '近90天月均销售金额']
+                sort_keys = ['取数维度（战区/集团）', '商品名称','近90天月均销售数量']
                 if all(key in final_benchmark_group.columns for key in sort_keys):
                     final_benchmark_group = final_benchmark_group.sort_values(
                         by=sort_keys,
-                        ascending=[False, False]
+                        ascending=[False, False,False]
                     )
                 all_parts.append(final_benchmark_group)
 
