@@ -33,7 +33,6 @@ class DataMerger:
 
             # 2. 根据当前scm行的'三级分类'筛选benchmark数据
             category = scm_row['三级大类']
-            print('三级大类：',category)
             if pd.isna(category):
                 continue # 如果scm行没有三级分类，则跳过对标品查找
 
