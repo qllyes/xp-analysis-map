@@ -84,8 +84,9 @@ class ResultExporter:
             for sep_idx in separator_indices:
                 excel_row = sep_idx + 2
                 worksheet.row_dimensions[excel_row].height = 150
-                for i in range(1, len(df.columns) + 1):
-                    worksheet.cell(row=excel_row, column=i).fill = separator_fill
+                # # 背景色：灰色
+                # for i in range(1, len(df.columns) + 1):
+                #     worksheet.cell(row=excel_row, column=i).fill = separator_fill
                 
                 # --- 核心改动：根据采购模式应用不同的合并规则 ---
                 if purchase_mode != '统采':
@@ -120,16 +121,30 @@ class ResultExporter:
                 else:
                     # 统采模式的原始公式
                     formula1 = f'=C{scm_data_row}&"-"&D{scm_data_row}&CHAR(10)&I{scm_data_row}&"-"&J{scm_data_row}&"-"&K{scm_data_row}&CHAR(10)&"新品组压测意见："&CHAR(10)&"1.顾客："&CHAR(10)&"2.员工："&CHAR(10)&"3.公司："&DN{scm_data_row}&DO{scm_data_row}&CHAR(10)&"4.市场情况：该通用名中康月销"&CR{scm_data_row}&CHAR(10)&"5.通用名结构："&CHAR(10)&"6.供应商条件："&DC{scm_data_row}&"、"&DF{scm_data_row}&"；"&DJ{scm_data_row}&CHAR(10)&"7.医保："&CK{scm_data_row}&"；"&"挂网价："&CM{scm_data_row}&CHAR(10)&"8.铺货："&"标准："&CU{scm_data_row}&"通"&"（新品费："&CV{scm_data_row}&"元）；买手洽谈："&CW{scm_data_row}&"（新品费："&CZ{scm_data_row}&"元）"'
-                    formula2 = f'="【引进理由】"&L{scm_data_row}&CHAR(10)&"【成份】"&ES{scm_data_row}&CHAR(10)&"【适应症】"&EU{scm_data_row}&CHAR(10)&"【采购总结卖点】"&CHAR(10)&EX{scm_data_row}&CHAR(10)&"【搜索关键词】"&EY{scm_data_row}'
+                    formula2 = f'="【引进理由】"&L{scm_data_row}&CHAR(10)&"【成份】"&EO{scm_data_row}&CHAR(10)&"【适应症】"&EQ{scm_data_row}&CHAR(10)&"【采购总结卖点】"&CHAR(10)&ET{scm_data_row}&CHAR(10)&"【搜索关键词】"&EU{scm_data_row}'
                 
                 worksheet.cell(row=excel_row, column=formula_col1).value = formula1
                 worksheet.cell(row=excel_row, column=formula_col2).value = formula2
+                
+                # --- 新增：在非统采模式下为分隔行的A/C/O列添加公式 ---
+                if purchase_mode != '统采':
+                    # A列公式（第1列）
+                    a_col = f'="压测"&M{scm_data_row}'
+                    worksheet.cell(row=excel_row, column=1).value = a_col
+                    
+                    # C列公式（第3列）
+                    c_col = f'=C{scm_data_row}'
+                    worksheet.cell(row=excel_row, column=3).value = c_col
+                    
+                    # O列公式（第15列）
+                    o_col = f'=O{scm_data_row}'
+                    worksheet.cell(row=excel_row, column=15).value = o_col
 
             for scm_idx in scm_indices:
                 excel_row = scm_idx + 2
                 for i in range(1, len(df.columns) + 1):
                     worksheet.cell(row=excel_row, column=i).fill = yellow_fill
-
+                
             # --- 后处理步骤 ---
             for row in worksheet.iter_rows(min_row=2, max_row=worksheet.max_row, min_col=1, max_col=worksheet.max_column):
                 for cell in row:

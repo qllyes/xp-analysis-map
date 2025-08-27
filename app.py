@@ -367,6 +367,7 @@ class NewProductAnalysisApp:
                     dtype_spec = {
                         '过会编码': str,
                         '新品编码': str,
+                        '商品编码': str,
                         '国际条码': str,
                         '国家药品编码': str
                     }
