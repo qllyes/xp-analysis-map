@@ -5,9 +5,14 @@ class DataMerger:
     """数据合并处理器，负责合并映射后的数据并排序"""
 
     @staticmethod
-    def merge_and_sort_data(map_scm_df: pd.DataFrame, map_benchmark_df: pd.DataFrame) -> pd.DataFrame:
+    def merge_and_sort_data(map_scm_df: pd.DataFrame, map_benchmark_df: pd.DataFrame, strategy) -> pd.DataFrame:
         """
         根据复杂的分组、筛选和排序规则合并SCM和对标品数据。
+        
+        Args:
+            map_scm_df: 映射后的SCM DataFrame。
+            map_benchmark_df: 映射后的对标品 DataFrame。
+            strategy: 当前采购模式对应的策略实例。
         """
         if map_scm_df.empty:
             return map_benchmark_df
@@ -19,6 +24,7 @@ class DataMerger:
         scm_df['__source__'] = 'scm'
         benchmark_df = map_benchmark_df.copy()
         benchmark_df['__source__'] = 'benchmark'
+        
         # 确保排序列为数值类型以便排序
         if '近90天月均销售数量' in benchmark_df.columns:
             benchmark_df['近90天月均销售数量'] = pd.to_numeric(benchmark_df['近90天月均销售数量'], errors='coerce').fillna(0)
@@ -34,46 +40,30 @@ class DataMerger:
             # 2. 根据当前scm行的'三级分类'筛选benchmark数据
             category = scm_row['三级大类']
             if pd.isna(category):
-                continue # 如果scm行没有三级分类，则跳过对标品查找
+                continue
 
             current_benchmark_base = benchmark_df[benchmark_df['三级大类'] == category]
             if current_benchmark_base.empty:
                 continue
 
-            # 3. 根据当前scm行的'采购模式'应用额外筛选条件
-            purchase_mode = scm_row['采购模式']
-            final_benchmark_group = pd.DataFrame()
-            if purchase_mode != '统采':
-                # 非统采逻辑
-                lev3_org_name = scm_row['提报战区']
-                condition = (
-                    (current_benchmark_base['取数维度（战区/集团）'] == '集团') |
-                    (current_benchmark_base['取数维度（战区/集团）'] == lev3_org_name)
-                )
-                final_benchmark_group = current_benchmark_base[condition]
-            else:
-                # 统采逻辑（只按三级分类匹配）
-                final_benchmark_group = current_benchmark_base
+            # 3. --- 核心改动：使用策略对象来执行筛选 ---
+            #    不再需要 if purchase_mode != '统采' 的判断
+            final_benchmark_group = strategy.filter_benchmark_data(scm_row, current_benchmark_base)
             
             # 4. 对筛选后的benchmark组进行排序
             if not final_benchmark_group.empty:
-                # 确保排序键存在
                 sort_keys = ['取数维度（战区/集团）', '商品名称','近90天月均销售数量']
                 if all(key in final_benchmark_group.columns for key in sort_keys):
                     final_benchmark_group = final_benchmark_group.sort_values(
                         by=sort_keys,
-                        ascending=[False, False,False]
+                        ascending=[False, False, False]
                     )
                 all_parts.append(final_benchmark_group)
 
         # 5. 合并所有处理好的部分
         if not all_parts:
-            return pd.DataFrame(columns=scm_df.columns) # 返回一个空的DataFrame
+            return pd.DataFrame(columns=scm_df.columns)
 
         final_df = pd.concat(all_parts).reset_index(drop=True)
-
-        # if scm_df['采购模式'].dropna().iloc[0] =='统采':
-        #     # 删除统采辅助列，地采专用 
-        #     final_df = final_df.drop(columns=['lev3_org_name','采购公司'], errors='ignore')
         
         return final_df
