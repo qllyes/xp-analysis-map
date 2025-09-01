@@ -120,7 +120,7 @@ class ResultExporter:
                     formula2 = f'="【引进理由】"&L{scm_data_row}&CHAR(10)&"【成份】"&EX{scm_data_row}&CHAR(10)&"【适应症】"&EZ{scm_data_row}&CHAR(10)&"【卖点】"&FB{scm_data_row}&CHAR(10)&"【关键搜索词】"&FC{scm_data_row}'
                 else:
                     # 统采模式的原始公式
-                    formula1 = f'=C{scm_data_row}&"-"&D{scm_data_row}&CHAR(10)&I{scm_data_row}&"-"&J{scm_data_row}&"-"&K{scm_data_row}&CHAR(10)&"新品组压测意见："&CHAR(10)&"1.顾客："&CHAR(10)&"2.员工："&CHAR(10)&"3.公司："&DN{scm_data_row}&DO{scm_data_row}&CHAR(10)&"4.市场情况：该通用名中康月销"&CR{scm_data_row}&CHAR(10)&"5.通用名结构："&CHAR(10)&"6.供应商条件："&DC{scm_data_row}&"、"&DF{scm_data_row}&"；"&DJ{scm_data_row}&CHAR(10)&"7.医保："&CK{scm_data_row}&"；"&"挂网价："&CM{scm_data_row}&CHAR(10)&"8.铺货："&"标准："&CU{scm_data_row}&"通"&"（新品费："&CV{scm_data_row}&"元）；买手洽谈："&CW{scm_data_row}&"（新品费："&CZ{scm_data_row}&"元）"'
+                    formula1 = f'=C{scm_data_row}&"-"&D{scm_data_row}&CHAR(10)&I{scm_data_row}&"-"&J{scm_data_row}&"-"&K{scm_data_row}&CHAR(10)&"新品组压测意见："&CHAR(10)&"1.顾客："&CHAR(10)&"2.员工："&CHAR(10)&"3.公司："&DJ{scm_data_row}&DK{scm_data_row}&CHAR(10)&"4.市场情况：该通用名中康月销"&CR{scm_data_row}&CHAR(10)&"5.通用名结构："&CHAR(10)&"6.供应商条件："&DA{scm_data_row}&"、"&DB{scm_data_row}&"；"&DF{scm_data_row}&CHAR(10)&"7.医保："&CK{scm_data_row}&"；"&"挂网价："&CM{scm_data_row}&CHAR(10)&"8.铺货："&"标准："&CS{scm_data_row}&"通"&"（新品费："&CT{scm_data_row}&"元）；买手洽谈："&CU{scm_data_row}&"（新品费："&CX{scm_data_row}&"元）"'
                     formula2 = f'="【引进理由】"&L{scm_data_row}&CHAR(10)&"【成份】"&EO{scm_data_row}&CHAR(10)&"【适应症】"&EQ{scm_data_row}&CHAR(10)&"【采购总结卖点】"&CHAR(10)&ET{scm_data_row}&CHAR(10)&"【搜索关键词】"&EU{scm_data_row}'
                 
                 worksheet.cell(row=excel_row, column=formula_col1).value = formula1
