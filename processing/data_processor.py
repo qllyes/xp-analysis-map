@@ -19,8 +19,8 @@ class DataProcessor:
         is_scm_mask = (merged_df['__source__'] == 'scm')
 
         # 2. 找到 SCM 数据块的起始位置
-        # 逻辑：当前行是 SCM 行，并且它的前一行不是 SCM 行
-        is_group_start = is_scm_mask & ~is_scm_mask.shift(1, fill_value=False)
+        # 逻辑：当前行是 SCM 行
+        is_group_start = is_scm_mask 
         insert_indices = merged_df[is_group_start].index.tolist()
 
         if not insert_indices:
