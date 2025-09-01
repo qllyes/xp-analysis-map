@@ -55,15 +55,23 @@ class DataMerger:
                 # 统采逻辑（只按三级分类匹配）
                 final_benchmark_group = current_benchmark_base
             
-            # 4. 对筛选后的benchmark组进行排序
+            # 4. 对筛选后的benchmark组进行排序,统采只按照销售排序，地采按照【商品名称+销售数量】排序
             if not final_benchmark_group.empty:
                 # 确保排序键存在
-                sort_keys = ['取数维度（战区/集团）', '商品名称','近90天月均销售数量']
-                if all(key in final_benchmark_group.columns for key in sort_keys):
-                    final_benchmark_group = final_benchmark_group.sort_values(
-                        by=sort_keys,
-                        ascending=[False, False,False]
-                    )
+                if purchase_mode != '统采':
+                    sort_keys = ['取数维度（战区/集团）', '商品名称','近90天月均销售数量']
+                    if all(key in final_benchmark_group.columns for key in sort_keys):
+                        final_benchmark_group = final_benchmark_group.sort_values(
+                            by=sort_keys,
+                            ascending=[False, False,False]
+                        )
+                else:
+                    sort_keys = ['取数维度（战区/集团）','近90天月均销售数量']
+                    if all(key in final_benchmark_group.columns for key in sort_keys):
+                        final_benchmark_group = final_benchmark_group.sort_values(
+                            by=sort_keys,
+                            ascending=[False,False]
+                        )
                 all_parts.append(final_benchmark_group)
 
         # 5. 合并所有处理好的部分
