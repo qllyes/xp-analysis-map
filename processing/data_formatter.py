@@ -69,5 +69,8 @@ class DataFormatter:
         # 步骤 5: 在返回前，移除临时的'__source__'列
         if '__source__' in df_copy.columns:
             df_copy.drop(columns=['__source__'], inplace=True)
-        
+            
+        #步骤6：将df_copy所有'长沙RDC'字符串替换为‘湖南RDC’
+        df_copy = df_copy.replace('长沙RDC', '湖南RDC')
+
         return df_copy
