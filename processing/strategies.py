@@ -102,7 +102,8 @@ class DicaiStrategy(AnalysisStrategy):
         self.status_updater(label="🧭 正在进行映射转换与数据合并…", state="running")
         map_scm_df = self.mapping_processor.run_mapping(map_df, enriched_scm_df, source_type='table2')
         map_benchmark_df = self.mapping_processor.run_mapping(map_df, benchmark_df, source_type='table3')
-        target_df = self.data_merger.merge_and_sort_data(map_scm_df, map_benchmark_df)
+        # --- 核心修复：传入 'strategy' 参数 ---
+        target_df = self.data_merger.merge_and_sort_data(map_scm_df, map_benchmark_df, strategy='地采')
         
         # 【地采特有】构建分组结构
         self.status_updater(label="📊 正在构建分组结构...", state="running")
@@ -147,7 +148,8 @@ class TongcaiStrategy(AnalysisStrategy):
         self.status_updater(label="🧭 正在进行映射转换与数据合并…", state="running")
         map_scm_df = self.mapping_processor.run_mapping(map_df, scm_df, source_type='table2')
         map_benchmark_df = self.mapping_processor.run_mapping(map_df, benchmark_df, source_type='table3')
-        target_df = self.data_merger.merge_and_sort_data(map_scm_df, map_benchmark_df)
+        # --- 核心修复：传入 'strategy' 参数 ---
+        target_df = self.data_merger.merge_and_sort_data(map_scm_df, map_benchmark_df, strategy='统采')
         
         # 【统采特有】不插入分隔行，直接获取 SCM 行索引
         self.status_updater(label="📊 正在识别新品行...", state="running")
@@ -169,3 +171,4 @@ class TongcaiStrategy(AnalysisStrategy):
             "executed_sql": executed_sql,
             "new_product_count": len(scm_indices)
         }
+
