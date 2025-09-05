@@ -3,14 +3,14 @@ import pandas as pd
 from pathlib import Path
 
 # 从各个模块导入所需的类和函数
-from config import setup_logging
+from config import setup_logging, NATIONAL_DIR_SQL_FILE
 from ui.components import FileUploadWidget
 from db.database_handler import SQLProcessor
 from processing.data_mapper import MappingProcessor
 from processing.data_merger import DataMerger
 from processing.data_processor import DataProcessor 
 from processing.data_formatter import DataFormatter 
-from processing.strategies import StrategyFactory # <-- 核心改动：导入策略工厂
+from processing.pipeline import AnalysisPipeline # <-- 核心改动：导入Pipeline
 from utils.exporter import ResultExporter
 from utils.file_handler import FileProcessor
 from utils.persistence import PersistenceManager
@@ -32,7 +32,6 @@ class NewProductAnalysisApp:
         self.data_formatter = DataFormatter() 
         self.result_exporter = ResultExporter()
         self.persistence_manager = PersistenceManager()
-        self.strategy = None # <-- 新增属性，用于持有当前选择的策略实例
 
     def _load_persisted_map(self):
         """在应用会话开始时尝试加载持久化的映射表"""
@@ -43,7 +42,34 @@ class NewProductAnalysisApp:
             else:
                 st.session_state["map_source"] = None
     
-    # --- 核心改动：删除了 _enrich_scm_data 方法，逻辑已移至策略类 ---
+    def _enrich_base_data(self, scm_df: pd.DataFrame) -> pd.DataFrame:
+        """
+        对SCM数据进行基础信息关联，例如国家医保目录，这是所有模式都需要的。
+        """
+        current_df = scm_df.copy()
+
+        # --- 关联国家医保目录 ---
+        try:
+            if NATIONAL_DIR_SQL_FILE.exists():
+                sql_query = self.sql_processor.read_sql_file(NATIONAL_DIR_SQL_FILE)
+                national_dir_df, _ = self.sql_processor.execute_simple_query(sql_query)
+                
+                if not national_dir_df.empty and '国家药品编码' in current_df.columns and '国家药品编码' in national_dir_df.columns:
+                    current_df['国家药品编码'] = current_df['国家药品编码'].astype(str)
+                    national_dir_df['国家药品编码'] = national_dir_df['国家药品编码'].astype(str)
+                    
+                    cols_to_replace = ['国家医保目录', '省医保目录', '省医保支付价']
+                    df_cleaned = current_df.drop(columns=[col for col in cols_to_replace if col in current_df.columns])
+                    
+                    current_df = pd.merge(df_cleaned, national_dir_df, on='国家药品编码', how='left')
+                else:
+                    st.warning("⚠️ 无法关联国家医保目录（缺少关联键或查询为空）。")
+            else:
+                st.warning(f"⚠️ 未找到 '{NATIONAL_DIR_SQL_FILE}' 文件，医保目录信息将不会关联。")
+        except Exception as e:
+            st.error(f"❌ 关联国家医保目录时出错: {e}")
+
+        return current_df
 
     def _inject_custom_css(self):
         st.markdown(
@@ -253,19 +279,13 @@ class NewProductAnalysisApp:
         col1, col2 = st.columns(2)
         
         with col1:
-            tooltip_text = ""
-            if st.session_state.get("map_source") == "history":
-                tooltip_text = "已自动加载历史映射表。您可以上传新文件进行覆盖。"
-            else:
-                tooltip_text = "您上传的映射表将被自动保存，供下次使用。"
-
+            tooltip_text = "已自动加载历史映射表。您可以上传新文件进行覆盖。" if st.session_state.get("map_source") == "history" else "您上传的映射表将被自动保存，供下次使用。"
             history_tooltip_html = f"""
                 <div class="tooltip-container">
                     <span class="tooltip-icon">ℹ️</span>
                     <span class="tooltip-text">{tooltip_text}</span>
                 </div>
             """
-
             st.html(f"""
                 <div class="uploader-subheader">
                     <span class="uploader-icon">🔄</span>
@@ -275,18 +295,16 @@ class NewProductAnalysisApp:
                 <p class="uploader-description">上传定义字段映射规则的Excel文件。</p>
             """)
             
-            map_file = st.file_uploader("上传定义字段映射关系的Excel文件", type=["xlsx", "xls"], key="map_uploader_new", label_visibility="collapsed")
-
+            map_file = st.file_uploader("上传映射关系表", type=["xlsx", "xls"], key="map_uploader_new", label_visibility="collapsed")
             if map_file:
                 with st.spinner("正在读取并保存新映射表..."):
                     new_map_df = self.file_processor.read_excel_safe(map_file)
                     st.session_state["map_df"] = new_map_df
                     st.session_state["map_source"] = "upload"
                     self.persistence_manager.save_dataframe(new_map_df, "map_df.pkl")
-            else:
-                if st.session_state.get("map_source") == "upload":
-                    st.session_state["map_df"] = None
-                    st.session_state["map_source"] = None
+            elif not st.session_state.get("map_df_from_upload"):
+                 st.session_state["map_source"] = "history" if "map_df" in st.session_state and st.session_state["map_df"] is not None else None
+
 
         with col2:
             st.html("""
@@ -297,19 +315,13 @@ class NewProductAnalysisApp:
                 <p class="uploader-description">上传从SCM系统导出的新品Excel文件。</p>
             """)
 
-            scm_file = st.file_uploader("上传从SCM系统导出的新品申报Excel文件", type=["xlsx", "xls"], key="scm_uploader_new", label_visibility="collapsed")
-            
+            scm_file = st.file_uploader("上传新品申报数据", type=["xlsx", "xls"], key="scm_uploader_new", label_visibility="collapsed")
             if scm_file:
                 with st.spinner("正在读取新品数据..."):
-                    dtype_spec = {
-                        '过会编码': str,
-                        '新品编码': str,
-                        '国际条码': str,
-                        '国家药品编码': str
-                    }
+                    dtype_spec = {'过会编码': str, '新品编码': str, '商品编码': str, '国际条码': str, '国家药品编码': str}
                     scm_df = self.file_processor.read_excel_safe(scm_file, dtype_spec=dtype_spec)
-                    # --- 核心改动：此处不再进行数据丰富，直接保存原始DataFrame ---
-                    st.session_state["scm_df"] = scm_df 
+                    base_enriched_scm_df = self._enrich_base_data(scm_df)
+                    st.session_state["scm_df"] = base_enriched_scm_df
             else:
                 if "scm_df" in st.session_state:
                     st.session_state["scm_df"] = None
@@ -318,9 +330,11 @@ class NewProductAnalysisApp:
             df = st.session_state["map_df"]
             source_text = "历史记录" if st.session_state.get("map_source") == "history" else "新上传"
             st.success(f"✅ 映射关系表已加载 ({source_text} - {df.shape[0]} 行, {df.shape[1]} 列)")
+        
         if st.session_state.get("scm_df") is not None:
             df = st.session_state["scm_df"]
-            st.success(f"✅ 新品申报数据已加载 ({df.shape[0]} 行，{df.shape[1]} 列)")
+            purchase_mode = df['采购模式'].dropna().iloc[0] if '采购模式' in df.columns and not df['采购模式'].dropna().empty else "未知"
+            st.success(f"✅ 新品申报数据已加载 ({df.shape[0]} 行, {df.shape[1]} 列) - **检测到采购模式:【{purchase_mode}】**")
             
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -346,67 +360,48 @@ class NewProductAnalysisApp:
         st.markdown('</div>', unsafe_allow_html=True)
 
     def _process_analysis(self):
-        """核心处理流程 (已使用策略模式重构)"""
+        """
+        核心处理流程 - 重构后
+        该函数现在只负责调度，不关心具体实现。
+        """
         try:
             map_df = st.session_state.get("map_df")
-            scm_df = st.session_state.get("scm_df") # <-- 这是原始的SCM数据
+            scm_df = st.session_state.get("scm_df")
 
             status = st.status("准备开始生成…", expanded=True)
             
-            # 1. 获取策略
-            status.update(label="识别采购模式...", state="running")
-            self.strategy = StrategyFactory.get_strategy(scm_df)
-            if not st.session_state.is_running: return
+            # 动态更新状态的回调函数
+            def update_status(label, state):
+                if not st.session_state.get("is_running", False):
+                    raise InterruptedError("用户中止了操作。")
+                status.update(label=label, state=state)
 
-            # 2. 使用策略来丰富数据
-            status.update(label="正在准备新品数据 (关联医保/战区)...", state="running")
-            enriched_scm_df = self.strategy.enrich_scm_data(scm_df)
-            if not st.session_state.is_running: return
-
-            # 3. 使用策略获取SQL查询参数
-            status.update(label="提取筛选条件...", state="running")
-            query_params = self.strategy.get_benchmark_query_params(enriched_scm_df)
+            # 确定采购模式
+            purchase_mode = scm_df['采购模式'].dropna().iloc[0] if '采购模式' in scm_df.columns and not scm_df['采购模式'].dropna().empty else "地采"
             
-            status.update(label="🔎 正在从数据库按条件查询对标品数据…", state="running")
-            sql_path = Path("对标品.sql")
-            if not sql_path.exists():
-                status.update(label="❌ 后台SQL文件缺失。", state="error"); return
+            # 准备所有处理器
+            processors = {
+                "sql": self.sql_processor,
+                "mapper": self.mapping_processor,
+                "merger": self.data_merger,
+                "processor": self.data_processor,
+                "formatter": self.data_formatter,
+                "exporter": self.result_exporter,
+                "status_updater": update_status
+            }
             
-            sql_query = self.sql_processor.read_sql_file(sql_path) 
-            benchmark_df, executed_sql = self.sql_processor.execute_sql_query(sql_query, **query_params)
-            st.session_state["executed_sql"] = executed_sql
-            if benchmark_df.empty: st.warning("⚠️ 对标品数据查询为空。")
-            if not st.session_state.is_running: return
-
-            status.update(label="🧭 正在进行映射转换与数据合并…", state="running")
-            map_scm_df = self.mapping_processor.run_mapping(map_df.copy(), enriched_scm_df.copy(), source_type='table2')
-            map_benchmark_df = self.mapping_processor.run_mapping(map_df.copy(), benchmark_df.copy(), source_type='table3')
-            if not st.session_state.is_running: return
+            # 初始化并运行Pipeline
+            pipeline = AnalysisPipeline(purchase_mode=purchase_mode, processors=processors)
+            result = pipeline.run(map_df.copy(), scm_df.copy())
             
-            # 4. 在合并时传入策略实例
-            target_df = self.data_merger.merge_and_sort_data(map_scm_df.copy(), map_benchmark_df.copy(), self.strategy)
-            if not st.session_state.is_running: return
-            
-            status.update(label="📊 正在构建分组结构...", state="running")
-            processed_df, sep_indices, scm_indices = self.data_processor.insert_group_separators(target_df)
-            if not st.session_state.is_running: return
-
-            status.update(label="🎨 正在清理与格式化数据...", state="running")
-            formatted_df = self.data_formatter.format_data(processed_df.copy())
-            if not st.session_state.is_running: return
-            
-            status.update(label="📦 正在生成高级格式的Excel文件…", state="running")
-            # 5. 使用策略获取导出配置
-            export_config = self.strategy.get_export_config()
-            output, filename = self.result_exporter.export_to_excel(formatted_df, sep_indices, scm_indices, export_config)
-            
-            st.session_state["new_product_count"] = len(scm_indices) 
-            st.session_state["result_df"] = formatted_df 
-            st.session_state["result_output"] = output
-            st.session_state["result_filename"] = filename
+            # 保存结果
+            for key, value in result.items():
+                st.session_state[key] = value
             
             status.update(label="🎉 生成完成！", state="complete")
 
+        except InterruptedError as e:
+            st.warning(f"操作已由用户中止。")
         except Exception as e:
             st.error(f"❌ 分析过程中发生错误: {e}")
             logger.error(f"分析处理错误: {e}", exc_info=True)
