@@ -99,14 +99,14 @@ class DicaiStrategy(AnalysisStrategy):
         if benchmark_df.empty: st.warning("⚠️ 对标品数据查询为空。")
 
         # 映射与合并
-        self.status_updater(label="🧭 正在进行映射转换与数据合并…", state="running")
+        self.status_updater(label="🧭 正在进行映射转换与数据分组…", state="running")
         map_scm_df = self.mapping_processor.run_mapping(map_df, enriched_scm_df, source_type='table2')
         map_benchmark_df = self.mapping_processor.run_mapping(map_df, benchmark_df, source_type='table3')
         # --- 核心修复：传入 'strategy' 参数 ---
         target_df = self.data_merger.merge_and_sort_data(map_scm_df, map_benchmark_df, strategy='地采')
         
-        # 【地采特有】构建分组结构
-        self.status_updater(label="📊 正在构建分组结构...", state="running")
+        # 【地采特有】
+        self.status_updater(label="📊 正在插入分隔行...", state="running")
         processed_df, sep_indices, scm_indices = self.data_processor.insert_group_separators(target_df)
         
         # 格式化与导出
@@ -145,7 +145,7 @@ class TongcaiStrategy(AnalysisStrategy):
         if benchmark_df.empty: st.warning("⚠️ 对标品数据查询为空。")
 
         # 映射与合并
-        self.status_updater(label="🧭 正在进行映射转换与数据合并…", state="running")
+        self.status_updater(label="🧭 正在进行映射转换与数据分组…", state="running")
         map_scm_df = self.mapping_processor.run_mapping(map_df, scm_df, source_type='table2')
         map_benchmark_df = self.mapping_processor.run_mapping(map_df, benchmark_df, source_type='table3')
         # --- 核心修复：传入 'strategy' 参数 ---
