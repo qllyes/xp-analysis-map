@@ -1,4 +1,4 @@
-SELECT
+SELECT DISTINCT
   drug_code AS '国家药品编码',
   national_abc_category AS '国家医保目录',
   prov_abc_catalog AS '省医保目录',
